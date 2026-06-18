@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LostFinder - ICCT Colleges</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%8D</text></svg>">
     <link rel="stylesheet" href="main.css">
 </head>
 <body>
@@ -23,108 +26,148 @@
 
     <!-- login form -->
     <div id="login" class="form-box hidden">
-        <div class="login-container">
-            <div class="finder-icon">
+        <div class="auth-card">
+            <button type="button" class="auth-back" onclick="showLanding()">← Back</button>
+            <div class="auth-brand">
                 <div class="finder-logo"></div>
-                <span class="finder-text">LostFinder</span>
+                <div>
+                    <span class="auth-brand-name">LostFinder</span>
+                    <span class="auth-brand-campus">ICCT Colleges Cainta</span>
+                </div>
             </div>
-            <p class="campus-subtitle">ICCT COLLEGES CAINTA CAMPUS</p>
-            <h3>Login</h3>
-            <input id="loginUsername" type="text" placeholder="Username or Email" />
-            <input id="loginPassword" type="password" placeholder="Password" />
-            <button onclick="login()">Login</button>
-            <p class="form-footer">No account? <a onclick="show('register')">Create Account</a></p>
+
+            <h3 class="auth-title">Sign In</h3>
+            <p class="auth-subtitle">Use your email or username to access the campus lost &amp; found portal.</p>
+
+            <div id="loginAlert" class="auth-alert hidden" role="alert"></div>
+
+            <form id="loginForm" class="auth-form" onsubmit="login(event)">
+                <div class="form-field">
+                    <label for="loginUsername">Email or Username</label>
+                    <input id="loginUsername" type="text" name="username"
+                           placeholder="you@icct.edu.ph or username"
+                           autocomplete="username" required />
+                </div>
+                <div class="form-field">
+                    <label for="loginPassword">Password</label>
+                    <div class="password-wrap">
+                        <input id="loginPassword" type="password" name="password"
+                               placeholder="Enter your password"
+                               autocomplete="current-password" required />
+                        <button type="button" class="password-toggle" onclick="togglePassword('loginPassword', this)" aria-label="Show password">👁</button>
+                    </div>
+                </div>
+                <button type="submit" id="loginBtn" class="btn-auth">Sign In</button>
+            </form>
+
+            <p class="form-footer">No account? <a onclick="showRegister()">Create account</a></p>
         </div>
     </div>
 
     <!-- register form -->
     <div id="register" class="form-box hidden">
-        <div class="login-container">
-            <div class="finder-icon">
+        <div class="auth-card auth-card-wide">
+            <button type="button" class="auth-back" onclick="showLanding()">← Back</button>
+            <div class="auth-brand">
                 <div class="finder-logo"></div>
-                <span class="finder-text">LostFinder</span>
+                <div>
+                    <span class="auth-brand-name">LostFinder</span>
+                    <span class="auth-brand-campus">ICCT Colleges Cainta</span>
+                </div>
             </div>
-            <p class="campus-subtitle">ICCT COLLEGES CAINTA CAMPUS</p>
-            <h3>Create Account</h3>
-            <input id="regName" type="text" placeholder="Full Name" />
-            <input id="regEmail" type="email" placeholder="Email Address" />
-            <input id="regUsername" type="text" placeholder="Username" />
-            <input id="regRole" type="text" placeholder="Role (Student / Faculty / Staff)" />
-            <input id="regIdNumber" type="text" placeholder="School ID Number" />
-            <input id="regContact" type="text" placeholder="Contact Number" />
-            <input id="regPassword" type="password" placeholder="Password" />
-            <input id="regRpass" type="password" placeholder="Confirm Password" />
-            <button onclick="register()">Register</button>
-            <p class="form-footer">Already have an account? <a onclick="show('login')">Login</a></p>
+
+            <h3 class="auth-title">Create Account</h3>
+            <p class="auth-subtitle">Register with your school email. Your profile is stored securely in Supabase.</p>
+
+            <div id="registerAlert" class="auth-alert hidden" role="alert"></div>
+
+            <form id="registerForm" class="auth-form" onsubmit="register(event)">
+                <div class="form-field">
+                    <label for="regName">Full Name <span class="required">*</span></label>
+                    <input id="regName" type="text" name="name" placeholder="Juan Dela Cruz" autocomplete="name" required />
+                </div>
+                <div class="form-field">
+                    <label for="regEmail">School Email <span class="required">*</span></label>
+                    <input id="regEmail" type="email" name="email" placeholder="name@icct.edu.ph" autocomplete="email" required />
+                    <span class="field-hint">Used for login — must be a valid email address</span>
+                </div>
+                <div class="form-field">
+                    <label for="regUsername">Username <span class="required">*</span></label>
+                    <input id="regUsername" type="text" name="username" placeholder="juan_delacruz" autocomplete="username" required />
+                    <span class="field-hint">Letters, numbers, and underscore only (min. 3 characters)</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="regRole">Role</label>
+                        <select id="regRole" name="role">
+                            <option value="Student">Student</option>
+                            <option value="Faculty">Faculty</option>
+                            <option value="Staff">Staff</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label for="regIdNumber">School ID <span class="required">*</span></label>
+                        <input id="regIdNumber" type="text" name="id_number" placeholder="2024-XXXXX" required />
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="regContact">Contact Number</label>
+                    <input id="regContact" type="tel" name="contact" placeholder="09XX XXX XXXX" autocomplete="tel" />
+                </div>
+                <div class="form-field">
+                    <label for="regPassword">Password <span class="required">*</span></label>
+                    <div class="password-wrap">
+                        <input id="regPassword" type="password" name="password"
+                               placeholder="Min. 6 characters" autocomplete="new-password" required minlength="6" />
+                        <button type="button" class="password-toggle" onclick="togglePassword('regPassword', this)" aria-label="Show password">👁</button>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="regRpass">Confirm Password <span class="required">*</span></label>
+                    <div class="password-wrap">
+                        <input id="regRpass" type="password" name="confirm_password"
+                               placeholder="Re-enter password" autocomplete="new-password" required minlength="6" />
+                        <button type="button" class="password-toggle" onclick="togglePassword('regRpass', this)" aria-label="Show password">👁</button>
+                    </div>
+                </div>
+                <button type="submit" id="registerBtn" class="btn-auth">Create Account</button>
+            </form>
+
+            <p class="form-footer">Already have an account? <a onclick="showLogin()">Sign in</a></p>
         </div>
     </div>
 
     <!-- main app -->
     <div id="app" class="app hidden">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo"></div>
-                <h2>LostFinder</h2>
-            </div>
-            <div class="user-profile">
-                <div class="user-avatar">👦🏻</div>
-                <div class="user-info">
-                    <p class="user-name" id="currentUserName">User Name</p>
-                    <p class="user-points">⭐ <span id="currentUserPoints">0</span> points</p>
-                </div>
-            </div>
-            <nav class="sidebar-nav">
-                <a onclick="page('dashboard')" class="active">
-                    <span class="nav-icon"></span> Dashboard
-                </a>
-                <a onclick="page('lost')">
-                    <span class="nav-icon"></span> Lost Items
-                </a>
-                <a onclick="page('found')">
-                    <span class="nav-icon"></span> Found Items
-                </a>
-                <a onclick="page('reports')">
-                    <span class="nav-icon"></span> My Reports
-                </a>
-                <a onclick="page('messages')">
-                    <span class="nav-icon"></span> Messages
-                </a>
-                <a onclick="page('leaderboard')">
-                    <span class="nav-icon"></span> Leaderboard
-                </a>
-                <a onclick="page('settings')">
-                    <span class="nav-icon"></span> Settings
-                </a>
-                <a onclick="logout()" class="logout-btn">
-                    <span class="nav-icon"></span> Logout
-                </a>
-            </nav>
-        </aside>
+        <aside class="sidebar" id="sidebar"></aside>
 
         <main class="main">
             <!-- dashboard -->
             <section id="dashboard">
-                <h2>Dashboard</h2>
+                <div class="section-header">
+                    <h2>Dashboard</h2>
+                    <div class="dashboard-actions">
+                        <button id="downloadInsightsJson" class="btn-secondary" onclick="downloadDashboardInsights('json')" disabled title="Download insights as JSON">⬇️ JSON</button>
+                        <button id="downloadInsightsCsv" class="btn-secondary" onclick="downloadDashboardInsights('csv')" disabled title="Download insights as CSV">⬇️ CSV</button>
+                    </div>
+                </div>
                 <div class="stats-cards">
                     <div class="stat-card blue">
-                        <div class="stat-icon"></div>
                         <div class="stat-info">
-                            <h4>Lost Items</h4>
-                            <p class="stat-number" id="myLostCount">0</p>
+                            <h4 id="dashLostLabel">Lost Items</h4>
+                            <p class="stat-number" id="myLostCount">—</p>
                         </div>
                     </div>
                     <div class="stat-card green">
-                        <div class="stat-icon"></div>
                         <div class="stat-info">
-                            <h4>Found Items</h4>
-                            <p class="stat-number" id="myFoundCount">0</p>
+                            <h4 id="dashFoundLabel">Found Items</h4>
+                            <p class="stat-number" id="myFoundCount">—</p>
                         </div>
                     </div>
                     <div class="stat-card purple">
-                        <div class="stat-icon"></div>
                         <div class="stat-info">
-                            <h4>Resolved</h4>
-                            <p class="stat-number" id="myResolvedCount">0</p>
+                            <h4 id="dashResolvedLabel">Resolved</h4>
+                            <p class="stat-number" id="myResolvedCount">—</p>
                         </div>
                     </div>
                 </div>
@@ -139,14 +182,6 @@
                     <input type="text" id="lostSearch" placeholder="Search by name, location, keyword..." oninput="filterLostItems()">
                     <select id="lostCategoryFilter" onchange="filterLostItems()">
                         <option value="">All Categories</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Accessories">Accessories</option>
-                        <option value="Documents">Documents</option>
-                        <option value="Books">Books / School Supplies</option>
-                        <option value="Bag">Bag / Backpack</option>
-                        <option value="Keys">Keys</option>
-                        <option value="Other">Other</option>
                     </select>
                 </div>
                 <div class="cards" id="lostItemsContainer"></div>
@@ -160,14 +195,6 @@
                     <input type="text" id="foundSearch" placeholder="Search by name, location, keyword..." oninput="filterFoundItems()">
                     <select id="foundCategoryFilter" onchange="filterFoundItems()">
                         <option value="">All Categories</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Accessories">Accessories</option>
-                        <option value="Documents">Documents</option>
-                        <option value="Books">Books / School Supplies</option>
-                        <option value="Bag">Bag / Backpack</option>
-                        <option value="Keys">Keys</option>
-                        <option value="Other">Other</option>
                     </select>
                 </div>
                 <div class="cards" id="foundItemsContainer"></div>
@@ -182,10 +209,10 @@
                 <div id="weeklyLimitInfo" class="weekly-limit-info"></div>
                 <div class="report-tabs">
                     <button class="tab-btn active" onclick="showReportTab('lost')">
-                        Lost Items (<span id="lostTabCount">0</span>)
+                        Lost Items (<span id="lostTabCount">—</span>)
                     </button>
                     <button class="tab-btn" onclick="showReportTab('found')">
-                        Found Items (<span id="foundTabCount">0</span>)
+                        Found Items (<span id="foundTabCount">—</span>)
                     </button>
                 </div>
                 <div id="lostReports" class="report-content">
@@ -199,7 +226,7 @@
             <!-- messages -->
             <section id="messages" class="hidden">
                 <h2>Messages</h2>
-                <p class="section-subtitle">Chat about lost and found items</p>
+                <p class="section-subtitle">Chat with item owners or people who submitted sightings</p>
                 <div class="messages-container">
                     <div class="conversations-panel">
                         <h3>Conversations</h3>
@@ -217,12 +244,12 @@
                             <div class="chat-header">
                                 <div>
                                     <h3 id="chatUserName"></h3>
-                                    <p id="chatItemName">About: Item Name</p>
+                                    <p id="chatItemName"></p>
                                 </div>
                                 <button onclick="closeChatWindow()" class="btn-close">✖</button>
                             </div>
                             <div class="chat-messages" id="chatMessages"></div>
-                            <div class="chat-input-container">
+                            <div class="chat-input-container" id="chatInputBar">
                                 <input type="text" id="messageInput" placeholder="Type your message..."
                                        onkeypress="if(event.key==='Enter') sendMessage()">
                                 <button onclick="sendMessage()" class="btn-send">Send</button>
@@ -252,45 +279,38 @@
                 </div>
                 <div class="points-info">
                     <h3>Points System</h3>
-                    <div class="points-grid">
-                        <div class="points-card">
-                            <div class="points-value">+5</div>
-                            <p>Report Lost Item</p>
-                        </div>
-                        <div class="points-card">
-                            <div class="points-value">+10</div>
-                            <p>Report Found Item</p>
-                        </div>
-                        <div class="points-card">
-                            <div class="points-value">+20</div>
-                            <p>Item Returned</p>
-                        </div>
-                    </div>
+                    <div id="pointsInfoGrid" class="points-grid"></div>
                 </div>
             </section>
 
             <!-- settings -->
             <section id="settings" class="hidden">
                 <h2>Settings</h2>
+                <p class="section-subtitle">Update your profile. Email and username are managed by your account.</p>
                 <div class="settings-card">
                     <h4>Account Settings</h4>
+                    <div id="settingsAlert" class="auth-alert hidden" role="alert"></div>
                     <div class="form-group">
-                        <label>Full Name</label>
+                        <label for="settingsName">Full Name</label>
                         <input type="text" id="settingsName" placeholder="Your name" />
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="settingsEmail" placeholder="your.email@example.com" />
+                        <label for="settingsEmail">Email</label>
+                        <input type="email" id="settingsEmail" placeholder="your.email@icct.edu.ph" readonly class="input-readonly" />
                     </div>
                     <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" id="settingsUsername" placeholder="username" />
+                        <label for="settingsUsername">Username</label>
+                        <input type="text" id="settingsUsername" placeholder="username" readonly class="input-readonly" />
                     </div>
                     <div class="form-group">
-                        <label>Contact Number</label>
-                        <input type="text" id="settingsContact" placeholder="e.g. 09XX-XXX-XXXX" />
+                        <label for="settingsRole">Role</label>
+                        <input type="text" id="settingsRole" readonly class="input-readonly" />
                     </div>
-                    <button class="btn-primary" onclick="saveSettings()">Save Changes</button>
+                    <div class="form-group">
+                        <label for="settingsContact">Contact Number</label>
+                        <input type="tel" id="settingsContact" placeholder="e.g. 09XX-XXX-XXXX" />
+                    </div>
+                    <button type="button" class="btn-primary" id="settingsSaveBtn" onclick="saveSettings()">Save Changes</button>
                 </div>
             </section>
         </main>
@@ -312,16 +332,7 @@
 
             <div class="form-group">
                 <label>Category</label>
-                <select id="reportCategory">
-                    <option value="Electronics">Electronics</option>
-                    <option value="Clothing">Clothing</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Documents">Documents</option>
-                    <option value="Books">Books / School Supplies</option>
-                    <option value="Bag">Bag / Backpack</option>
-                    <option value="Keys">Keys</option>
-                    <option value="Other">Other</option>
-                </select>
+                <select id="reportCategory"></select>
             </div>
 
             <div class="form-group">
@@ -404,20 +415,79 @@
         </div>
     </div>
 
-    <!-- ITEM DETAILS MODAL -->
-    <div class="modal" id="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">✖</span>
-            <h3 id="modalTitle">Item Details</h3>
-            <div class="modal-details">
-                <p><strong>Status:</strong> <span id="modalStatus"></span></p>
-                <p><strong>Location:</strong> <span id="modalLocation"></span></p>
-                <p><strong>Description:</strong> <span id="modalDescription"></span></p>
+    <!-- SIGHTING TIP MODAL -->
+    <div class="modal" id="sightingModal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeSightingModal()">✖</span>
+            <h3>Submit Sighting</h3>
+            <p id="sightingItemTitle" style="color:#2c3e50;font-weight:600;margin-bottom:4px;"></p>
+            <p id="sightingItemDesc" style="color:#7f8c8d;font-size:0.9rem;margin-bottom:16px;"></p>
+
+            <div id="sightingForm">
+                <div class="sighting-notice">
+                    👁️ <strong>Spotted something similar?</strong><br>
+                    Tell the owner where and what you saw. We compare your tip to their report and rate how closely it matches.
+                </div>
+
+                <div class="form-group">
+                    <label for="sightingLocation">Where did you see it? (optional)</label>
+                    <input type="text" id="sightingLocation" placeholder="e.g., Cafeteria near the entrance"
+                        oninput="updateSightingMatchPreview()" />
+                </div>
+
+                <div class="form-group">
+                    <label for="sightingDescription">What did you see? <span style="color:#e74c3c;">*</span></label>
+                    <textarea id="sightingDescription" rows="4"
+                        placeholder="Describe the item, time of day, who was holding it, distinguishing details..."
+                        oninput="updateSightingMatchPreview()"></textarea>
+                </div>
+
+                <div id="sightingMatchPreview" style="margin-bottom:12px;"></div>
+
+                <div class="form-group">
+                    <label for="sightingImage">Photo (optional)</label>
+                    <input type="file" id="sightingImage" accept="image/*" onchange="handleSightingImageUpload(event)">
+                    <div id="sightingImagePreview"></div>
+                </div>
+
+                <button class="btn-primary btn-block" id="sightingSubmitBtn" onclick="submitSighting()">Submit Sighting</button>
             </div>
-            <button class="btn-primary btn-block" onclick="closeModal()">Close</button>
+
+            <div id="sightingResult" class="hidden">
+                <div id="sightingResultBadge" style="margin-bottom:16px;"></div>
+                <p id="sightingResultText" style="color:#2c3e50;line-height:1.6;margin-bottom:16px;"></p>
+                <p style="color:#7f8c8d;font-size:0.9rem;margin-bottom:16px;">The owner can review your tip and confirm if it was helpful or led to recovery. You earn points when verified.</p>
+                <div id="sightingResultActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+                <button class="btn-secondary btn-block" style="margin-top:12px;" onclick="closeSightingModal()">Close</button>
+            </div>
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <!-- RECOVERY MODAL (owner marks lost item found) -->
+    <div class="modal" id="recoveryModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeRecoveryModal()">✖</span>
+            <h3>Mark Item Recovered</h3>
+            <p id="recoveryItemTitle" style="color:#2c3e50;font-weight:600;margin-bottom:8px;"></p>
+            <div class="sighting-notice">
+                ✅ Confirm you got your item back. If someone’s sighting tip helped, credit them — they earn <strong>+25 points</strong>.
+            </div>
+            <div class="form-group">
+                <label for="recoveryCredit">Who helped you recover it?</label>
+                <select id="recoveryCredit">
+                    <option value="">Found it on my own / other way</option>
+                </select>
+            </div>
+            <input type="hidden" id="recoveryReportId" />
+            <button class="btn-primary btn-block" id="recoverySubmitBtn" onclick="submitLostRecovery()">Confirm Recovery</button>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,17 @@
+{
+  "name": "lostfinder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ICCT Colleges Cainta Campus Lost and Found",
+  "scripts": {
+    "config": "node scripts/generate-config.mjs",
+    "predev": "node scripts/generate-config.mjs",
+    "dev": "live-server --port=8080 --no-browser",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2",
+    "vitest": "^3.2.4"
+  }
+}
