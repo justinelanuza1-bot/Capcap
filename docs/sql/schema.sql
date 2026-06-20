@@ -1,13 +1,20 @@
 -- =============================================================================
--- LostFinder / Capcap — CONSOLIDATED SCHEMA (run once on a fresh database)
+-- LostFinder / Capcap — FINAL CONSOLIDATED SCHEMA (run once on a fresh database)
 -- =============================================================================
--- This single file replaces migrations 001–015. Run it in the Supabase SQL
--- Editor on a clean project (or after 000_reset_database.sql).
--- It is idempotent where practical and safe to re-run.
+-- This single file is the complete, authoritative database setup. It folds in
+-- every migration (001–017) including the unified claim flow + notifications.
+-- Run it in the Supabase SQL Editor on a clean project (or after
+-- 000_reset_database.sql). It is idempotent where practical and safe to re-run.
 --
 -- After running:
 --   1. Auth → Providers → Email: enable provider + sign-ups
 --   2. Create an admin: set profiles.role = 'admin' for your user
+--
+-- Claim flow (finder-in-the-loop):
+--   submit_claim   → exact answers become a VERIFIED claim "awaiting handover"
+--                    (issues a retrieval code; does NOT auto-resolve or pay yet)
+--   confirm_handover → finder OR admin closes the case: report = resolved,
+--                    finder awarded points. This is the ONLY step that resolves.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -40,7 +47,7 @@ create table if not exists public.reports (
   image_url text default '',
   verify_hashes jsonb,
   contact_number text default '',
-  status text not null default 'pending' check (status in ('pending', 'resolved')),
+  status text not null default 'pending' check (status in ('pending', 'claimed', 'resolved')),
   created_at timestamptz not null default now(),
   resolved_at timestamptz
 );
@@ -60,9 +67,10 @@ create table if not exists public.claims (
   exact_match boolean not null default false,
   vague boolean not null default false,
   status text not null default 'pending-review'
-    check (status in ('auto-approved', 'pending-review', 'approved', 'denied')),
+    check (status in ('auto-approved', 'pending-review', 'approved', 'denied', 'completed')),
   retrieval_code text,
   expires_at timestamptz,
+  pickup_location text default '',
   created_at timestamptz not null default now()
 );
 
@@ -105,6 +113,21 @@ create index if not exists sightings_report_id_idx on public.sightings (report_i
 create index if not exists sightings_reporter_id_idx on public.sightings (reporter_id);
 create index if not exists sightings_created_at_idx on public.sightings (created_at desc);
 create index if not exists sightings_status_idx on public.sightings (status);
+
+-- In-app notification center (claims, sightings, handovers)
+create table if not exists public.notifications (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  type text not null default 'info',
+  title text not null,
+  body text default '',
+  link text default '',
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_user_idx
+  on public.notifications (user_id, is_read, created_at desc);
 
 -- recovery link added after sightings exists (avoids circular create-time FK)
 alter table public.reports
@@ -440,6 +463,10 @@ grant execute on function public.verify_claim_answers(bigint, text, text, text) 
 -- 5. CLAIM SUBMIT + RESOLVE RPCs (atomic, avoids client RLS pitfalls)
 -- -----------------------------------------------------------------------------
 
+-- Unified claim submit: an EXACT match becomes a VERIFIED claim "awaiting
+-- handover" (issues a retrieval code, marks the report 'claimed'). It does NOT
+-- auto-resolve the report or pay the finder — that happens in confirm_handover.
+-- Always notifies the relevant parties via the notifications table.
 create or replace function public.submit_claim(
   p_report_id bigint,
   p_answer1 text,
@@ -463,6 +490,7 @@ declare
   v_claim public.claims;
   v_claimant_id uuid;
   v_claimant_name text;
+  v_admin record;
 begin
   v_claimant_id := auth.uid();
   if v_claimant_id is null then
@@ -476,7 +504,7 @@ begin
   where id = p_report_id and type = 'found' and status = 'pending';
 
   if not found or v_report.id is null then
-    raise exception 'Found item not available for claim (may already be resolved)';
+    raise exception 'Found item not available for claim (may already be claimed or resolved)';
   end if;
 
   v_stored := v_report.verify_hashes;
@@ -515,17 +543,46 @@ begin
     p_report_id, v_report.item_name, v_report.user_id, v_claimant_id, coalesce(v_claimant_name, 'User'),
     jsonb_build_object('q1', h1, 'q2', h2, 'q3', h3),
     v_exact, v_vague,
-    case when v_exact then 'auto-approved' else 'pending-review' end,
+    case when v_exact then 'approved' else 'pending-review' end,
     v_code, v_expires
   )
   returning * into v_claim;
 
+  -- Exact match → report awaits handover (not resolved yet)
   if v_exact then
-    update public.reports
-    set status = 'resolved', resolved_at = coalesce(resolved_at, now())
-    where id = p_report_id;
+    update public.reports set status = 'claimed' where id = p_report_id;
+  end if;
 
-    update public.profiles set points = points + 20 where id = v_report.user_id;
+  -- Always notify the finder their item was claimed
+  insert into public.notifications (user_id, type, title, body, link)
+  values (
+    v_report.user_id,
+    case when v_exact then 'claim-verified' else 'claim-new' end,
+    case when v_exact then 'Your found item was claimed and verified'
+         else 'Someone claimed your found item' end,
+    coalesce(v_claimant_name,'A user') || ' claimed "' || v_report.item_name || '". ' ||
+    case when v_exact then 'Ownership was auto-verified. Confirm the handover when you return the item.'
+         else 'Verification was not exact — an admin will review it.' end,
+    'reports'
+  );
+
+  if v_exact then
+    insert into public.notifications (user_id, type, title, body, link)
+    values (
+      v_claimant_id, 'claim-verified', 'Claim verified — ready for pickup',
+      'Your claim for "' || v_report.item_name || '" is verified. Retrieval code: ' ||
+      v_code || ' (valid 48h). Coordinate with the finder for handover.',
+      'my-claims'
+    );
+  else
+    for v_admin in select id from public.profiles where role = 'admin' loop
+      insert into public.notifications (user_id, type, title, body, link)
+      values (
+        v_admin.id, 'claim-review', 'New claim needs review',
+        coalesce(v_claimant_name,'A user') || ' claimed "' || v_report.item_name ||
+        '". Verification was not exact.', 'claims-panel'
+      );
+    end loop;
   end if;
 
   return jsonb_build_object(
@@ -540,6 +597,64 @@ end;
 $$;
 
 grant execute on function public.submit_claim(bigint, text, text, text) to authenticated;
+
+-- Finder OR admin confirms the physical handover. This is the only step that
+-- resolves the report and awards finder points. Idempotent.
+create or replace function public.confirm_handover(p_claim_id bigint)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid;
+  v_claim public.claims;
+  v_is_admin boolean;
+begin
+  v_uid := auth.uid();
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_claim from public.claims where id = p_claim_id;
+  if not found then
+    raise exception 'Claim not found';
+  end if;
+
+  select public.is_admin() into v_is_admin;
+  if v_claim.finder_id <> v_uid and not v_is_admin then
+    raise exception 'Only the finder or an admin can confirm this handover';
+  end if;
+
+  if v_claim.status = 'completed' then
+    raise exception 'This handover was already confirmed';
+  end if;
+  if v_claim.status not in ('approved', 'auto-approved') then
+    raise exception 'This claim is not ready for handover';
+  end if;
+
+  update public.claims set status = 'completed' where id = p_claim_id;
+
+  update public.reports
+  set status = 'resolved', resolved_at = coalesce(resolved_at, now())
+  where id = v_claim.report_id;
+
+  update public.profiles set points = points + 20 where id = v_claim.finder_id;
+
+  insert into public.notifications (user_id, type, title, body, link)
+  values
+    (v_claim.claimant_id, 'handover-done', 'Item returned — case closed',
+     'Your claim for "' || v_claim.item_name || '" is complete. Thanks for using LostFinder!',
+     'my-claims'),
+    (v_claim.finder_id, 'handover-done', 'Handover confirmed — points awarded',
+     'You returned "' || v_claim.item_name || '" and earned 20 points. Thank you!',
+     'reports');
+
+  return jsonb_build_object('claim_id', v_claim.id, 'status', 'completed');
+end;
+$$;
+
+grant execute on function public.confirm_handover(bigint) to authenticated;
 
 -- Admin-approve path / fallback resolve
 drop function if exists public.resolve_report_for_claim(bigint);
@@ -697,6 +812,28 @@ create policy "sightings_update_owner"
   using (exists (select 1 from public.reports r where r.id = report_id and r.user_id = auth.uid()))
   with check (exists (select 1 from public.reports r where r.id = report_id and r.user_id = auth.uid()));
 
+-- NOTIFICATIONS
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_select_own" on public.notifications;
+create policy "notifications_select_own"
+  on public.notifications for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "notifications_update_own" on public.notifications;
+create policy "notifications_update_own"
+  on public.notifications for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Any authenticated user may create a notification for another user
+-- (so a claimant can notify a finder, etc.). Low-risk for a campus app.
+drop policy if exists "notifications_insert_any" on public.notifications;
+create policy "notifications_insert_any"
+  on public.notifications for insert to authenticated
+  with check (true);
+
+grant select, insert, update on public.notifications to authenticated;
+
 -- -----------------------------------------------------------------------------
 -- 7. STORAGE (report-images bucket: report photos + sighting photos)
 -- -----------------------------------------------------------------------------
@@ -752,6 +889,21 @@ begin
 exception
   when others then
     raise notice 'Could not add messages to supabase_realtime publication: %', sqlerrm;
+end;
+$$;
+
+-- Live in-app notifications
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+exception
+  when others then
+    raise notice 'Could not add notifications to supabase_realtime publication: %', sqlerrm;
 end;
 $$;
 

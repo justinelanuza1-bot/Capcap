@@ -1,192 +1,160 @@
-# Setup Guide — LostFinder + Supabase
+# LostFinder — Setup & Configuration
 
-Follow these steps once to connect and run the app. **All 5 phases are implemented in code.**
+The campus Lost & Found system for ICCT Colleges Cainta. This guide takes you from a fresh clone to a running app backed by Supabase.
 
-## 1. Create Supabase project
+---
 
-1. Go to [supabase.com](https://supabase.com) → New Project
-2. Note your **Project URL** and **anon public key** (Settings → API)
+## 1. Prerequisites
 
-## 2. Run SQL migrations
+| Tool | Why | Notes |
+|------|-----|-------|
+| **Node.js 18+** | Runs the dev server and the config generator | `node -v` to check |
+| **A Supabase project** | Database, auth, storage, realtime | Free tier is enough — create one at [supabase.com](https://supabase.com) |
+| **A modern browser** | The app is a vanilla-JS PWA | Chrome/Edge/Firefox |
 
-**Fastest option (fresh project):** run the single consolidated file [`schema.sql`](./sql/schema.sql) — it contains everything below (001–015) in one script. Then skip to step 3.
+No build step or framework is required — the frontend is plain HTML, CSS, and ES modules.
 
-Or run the individual migrations in order:
+---
 
-| File | Purpose |
-|------|---------|
-| [`000_reset_database.sql`](./sql/000_reset_database.sql) | **Optional** — wipe all tables/data for fresh start |
-| [`001_schema.sql`](./sql/001_schema.sql) | Tables + triggers |
-| [`002_rls.sql`](./sql/002_rls.sql) | Security policies |
-| [`003_storage.sql`](./sql/003_storage.sql) | Image storage bucket |
-| [`004_admin_messages.sql`](./sql/004_admin_messages.sql) | Admin message stats |
-| [`005_auth_rpc.sql`](./sql/005_auth_rpc.sql) | Login username lookup + signup duplicate check |
-| [`006_ensure_profile.sql`](./sql/006_ensure_profile.sql) | Fix missing profiles on login |
-| [`007_sightings.sql`](./sql/007_sightings.sql) | Sighting tips on lost items |
-| [`008_sighting_verification.sql`](./sql/008_sighting_verification.sql) | Owner verifies tips & credits recovery |
-| [`009_fix_messages_rls.sql`](./sql/009_fix_messages_rls.sql) | Fix message send RLS errors |
-| [`010_verify_claim_rpc.sql`](./sql/010_verify_claim_rpc.sql) | Server-side claim verification + Realtime messages |
-| [`011_award_points_rpc.sql`](./sql/011_award_points_rpc.sql) | Award points to other users (sighting recovery, claims) |
-| [`012_fix_claims_rls.sql`](./sql/012_fix_claims_rls.sql) | Fix claim submit + auto-resolve found items |
-| [`013_fix_claim_hash.sql`](./sql/013_fix_claim_hash.sql) | Fix verify_claim_answers integer overflow |
-| [`014_submit_claim_rpc.sql`](./sql/014_submit_claim_rpc.sql) | **Required for claims** — one-shot `submit_claim` RPC |
-| [`015_fix_resolve_claim_return.sql`](./sql/015_fix_resolve_claim_return.sql) | Patch resolve RPC return type (if coerce error persists) |
-
-### Fresh start (wipe all data)
-
-1. Run [`000_reset_database.sql`](./sql/000_reset_database.sql) in SQL Editor
-2. Re-run `001` through `012` in order
-3. Users must **register again** (profiles are deleted; auth accounts remain unless you uncomment Section 8 in the reset script)
-
-## 3. Configure auth (required)
-
-### Enable email signups (fixes "Email signups are disabled")
-
-1. Open your project at [supabase.com/dashboard](https://supabase.com/dashboard)
-2. Go to **Authentication** → **Providers** → **Email**
-3. Turn **ON** these settings:
-   - **Enable Email provider** — must be enabled
-   - **Enable sign ups** — must be enabled (this is what causes the error when off)
-4. For local demo, turn **OFF** **Confirm email** (so users can sign in right after registering)
-
-### URL configuration
-
-**Authentication → URL Configuration:**
-- Site URL: `http://localhost:8080`
-- Redirect URLs: `http://localhost:8080`
-
-> If you still see "Email signups are disabled", check **Authentication → Settings** (or **Sign In / Providers** in newer dashboards) and ensure sign-ups are not disabled at the project level.
-
-## 4. Create admin user
-
-1. **Authentication → Users → Add user**
-   - Email: `admin@icct.edu.ph`
-   - Password: choose a secure password
-
-2. **Table Editor → profiles** → set `role` to `admin`
-
-## 5. Configure environment variables
-
-Copy the example env file and add your Supabase credentials:
+## 2. Install
 
 ```bash
-# Windows
-copy .env.example .env
-
-# Mac / Linux
-cp .env.example .env
+git clone <your-repo-url> Capcap
+cd Capcap
+npm install
 ```
 
-Edit `.env`:
+---
 
-```env
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_ANON_KEY=eyJhbG...
+## 3. Configure environment
+
+The browser config (`js/config.js`) is **generated from `.env`** — never edit `js/config.js` by hand.
+
+1. Copy the example file:
+
+```bash
+copy .env.example .env   # Windows
+# cp .env.example .env    # macOS/Linux
+```
+
+2. Fill in your Supabase project values in `.env`:
+
+```ini
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=your-anon-public-key-here
 WEEKLY_REPORT_LIMIT=3
 APP_ENV=development
 ```
 
-Generate the app config (runs automatically with `npm run dev`):
+> Find these under **Supabase → Project Settings → API**. Use the **anon/public** key only.
+> **Never** put the `service_role` key in `.env` — it would be exposed in the browser.
+
+3. Generate `js/config.js`:
 
 ```bash
 npm run config
 ```
 
-This creates `js/config.js` from `.env`. **Never commit `.env` or `js/config.js`** — they are gitignored.
+(`npm run dev` also runs this automatically via the `predev` hook.)
 
-> Get keys from Supabase → **Settings → API** (use the **anon public** key only).
+---
 
-## 6. Run locally
+## 4. Set up the database
+
+1. Open **Supabase → SQL Editor**.
+2. Paste the entire contents of [`docs/sql/schema.sql`](./sql/schema.sql) and **Run**.
+
+This single file creates everything in one pass:
+
+- Tables: `profiles`, `reports`, `claims`, `messages`, `sightings`, `notifications`
+- The signup trigger that auto-creates a profile
+- Blind-verification hashing + the `submit_claim` / `confirm_handover` claim flow
+- Row Level Security policies for every table
+- The `report-images` storage bucket and its policies
+- Realtime for `messages` and `notifications`
+
+> Re-running `schema.sql` is safe — it uses `if not exists` / `drop ... if exists` throughout.
+> To wipe everything first, run [`docs/sql/000_reset_database.sql`](./sql/000_reset_database.sql).
+
+---
+
+## 5. Enable authentication
+
+In **Supabase → Authentication → Providers → Email**:
+
+- Enable the **Email** provider.
+- Enable **sign-ups**.
+- For local testing you may turn **off** "Confirm email" so accounts work immediately.
+
+---
+
+## 6. Create an admin
+
+There is no admin sign-up in the UI — admins are promoted manually for security.
+
+1. Register a normal account through the app.
+2. In **Supabase → Table Editor → `profiles`**, find that user.
+3. Set its **`role`** column to `admin` and save.
+4. Sign out and back in. The sidebar will now show the **Admin** workspace.
+
+---
+
+## 7. Run the app
 
 ```bash
-npm install
 npm run dev
 ```
 
-Open [http://localhost:8080](http://localhost:8080)
+This serves the app at **http://localhost:8080**. If the port is busy, `live-server` picks the next free port — check the terminal output.
 
-> Must use a local server (`npm run dev`). Opening `index.html` directly breaks ES modules.
-
-## 7. Full test checklist
-
-| Test | Expected |
-|------|----------|
-| Register + login | Works, session persists on refresh |
-| Report lost item (Browser A) | Visible on Browser B |
-| Report found item with photo | Image from Storage URL |
-| Claim correct answers | Auto-approved + retrieval code |
-| Claim wrong answers | Pending admin review |
-| Send message | Recipient sees it in Messages |
-| Leaderboard | Real points from Supabase |
-| Settings save | Persists after refresh |
-| Admin panel | Campus-wide stats |
-| Admin resolve/delete | Works |
-
-## Implementation status
-
-| Phase | Feature | Status |
-|-------|---------|--------|
-| 0 | Setup, SQL, dev server | ✅ |
-| 1 | Supabase Auth | ✅ |
-| 2 | Shared reports | ✅ |
-| 3 | Claims + images | ✅ |
-| 4 | Messages, admin, leaderboard | ✅ |
-| 5 | Cleanup (no localStorage, XSS, CSS) | ✅ |
-
-## Deploy to production (Phase 5)
-
-### Option A: Vercel
+### Optional: run tests
 
 ```bash
-npm i -g vercel
-vercel
+npm test          # one-off
+npm run test:watch
 ```
 
-Set Supabase Auth Site URL to your Vercel domain (e.g. `https://lostfinder.vercel.app`).
+---
 
-### Option B: Netlify
+## 8. Troubleshooting
 
-Drag-and-drop the project folder at [netlify.com/drop](https://app.netlify.com/drop), or connect your GitHub repo.
-
-### Option C: GitHub Pages
-
-Push repo, enable Pages on `main` branch, root `/`.
-
-Update Supabase Auth Site URL to match your deployed URL.
-
-## Troubleshooting
-
-| Problem | Fix |
+| Symptom | Fix |
 |---------|-----|
-| CORS / module errors | Use `npm run dev`, not `file://` |
-| Login fails after register | Disable email confirmation in Supabase |
-| Image upload fails | Run `003_storage.sql` |
-| Admin message count shows 0 | Run `004_admin_messages.sql` |
-| Login with username fails | Run `005_auth_rpc.sql` in Supabase |
-| **Email signups are disabled** | Supabase → Auth → Providers → Email → enable **Enable sign ups** |
-| **Cannot coerce the result to a single JSON object** | Run `006_ensure_profile.sql` — auth user has no `profiles` row |
-| Sighting submit fails | Run `007_sightings.sql` in Supabase |
-| Sighting verify / recovery fails | Run `008_sighting_verification.sql` in Supabase |
-| Dashboard: "more than one relationship" for sightings | Fixed in app — refresh page. Caused by `recovery_sighting_id` (008) + `report_id` (007) both linking sightings ↔ reports |
-| "Cannot coerce to single JSON object" on sighting recovery / helpful | Run `011_award_points_rpc.sql` — owners cannot update another user's `profiles.points` via RLS |
-| "Cannot coerce to single JSON object" on claim submit | Run `013`, `014`, `015` in Supabase; hard-refresh browser (`Ctrl+Shift+R`). Verify: `select proname from pg_proc where proname = 'submit_claim';` |
-| **Message send RLS error** | Run `009_fix_messages_rls.sql`, then sign out and sign in |
-| `Invalid API key` | Check `.env` values, then run `npm run config` |
+| **Styles or code look stale after an update** | The app is a PWA with a service worker. Hard-refresh with `Ctrl+Shift+R`. If still stale: DevTools → Application → Service Workers → **Unregister**, then reload. |
+| **"Could not find function … in schema cache"** | Re-run `schema.sql`, then run `notify pgrst, 'reload schema';` in the SQL editor. |
+| **Notifications / "My Claims" don't update live** | Confirm `notifications` and `messages` are in the **Realtime** publication (the schema adds them; check **Database → Replication**). |
+| **"row-level security" errors on insert/update** | Make sure `schema.sql` ran fully and the user is signed in. RLS requires an authenticated session. |
+| **Login says profile missing** | The signup trigger creates profiles automatically; the app also self-heals via `ensure_user_profile`. Re-run `schema.sql` if the trigger is absent. |
+| **Admin link not visible** | The `profiles.role` must be exactly `admin` (lowercase). Sign out/in after changing it. |
+
+---
 
 ## Project structure
 
 ```
 Capcap/
-├── index.html
-├── main.js              # App logic (ES module)
-├── main.css
+├── index.html            # App shell (all sections live here)
+├── main.js               # App orchestrator + page router
+├── main.css              # All styles
+├── sw.js                 # Service worker (PWA cache)
+├── manifest.json         # PWA manifest
+├── .env                  # Your Supabase config (gitignored)
 ├── js/
-│   ├── config.js        # Auto-generated from .env (gitignored)
-│   ├── config.example.js
-│   ├── services/        # auth, reports, claims, messages, storage, sightings
-│   └── utils/escape.js  # XSS protection
-├── docs/sql/            # Database migrations
-.env.example             # Env template (commit this)
-.env                     # Your secrets (gitignored)
-scripts/generate-config.mjs
+│   ├── config.js         # Generated from .env — do not edit
+│   ├── constants.js      # Categories, points, badge tiers
+│   ├── services/         # Supabase wrappers (auth, reports, claims, …)
+│   ├── domain/           # Matching + blind-verification logic
+│   └── ui/               # Messages controller, init helpers
+├── scripts/
+│   └── generate-config.mjs
+└── docs/
+    ├── SETUP.md          # This file
+    ├── USER-GUIDE.md     # How to use the system
+    └── sql/
+        ├── schema.sql    # Final consolidated database setup
+        └── 000_reset_database.sql
 ```
+
+> `docs/sql/schema.sql` is the single source of truth for the database. The numbered
+> migration files in `docs/sql/` are kept only for history — you do **not** need to run
+> them on a fresh project.

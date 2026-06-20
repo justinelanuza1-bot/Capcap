@@ -39,6 +39,47 @@ export async function fetchClaims({ status } = {}) {
     return claims.map(c => ({ ...c, report: reportById[c.report_id] || null }));
 }
 
+// Attach the related found-item report to a list of claims (separate query,
+// never embedding, to avoid ambiguous-FK issues).
+async function attachReportsToClaims(claims) {
+    if (!claims?.length) return claims || [];
+    const reportIds = [...new Set(claims.map(c => c.report_id))];
+    const { data: reports, error } = await supabase
+        .from('reports')
+        .select('id, description, image_url, location, user_name, contact_number, category, date_reported, user_id, status')
+        .in('id', reportIds);
+    if (error) {
+        console.warn('attachReportsToClaims:', error.message);
+        return claims;
+    }
+    const byId = Object.fromEntries((reports || []).map(r => [r.id, r]));
+    return claims.map(c => ({ ...c, report: byId[c.report_id] || null }));
+}
+
+/** Claims submitted by a user (claimant view / My Claims). */
+export async function fetchClaimsByClaimant(claimantId) {
+    if (!claimantId) return [];
+    const { data, error } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('claimant_id', claimantId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return attachReportsToClaims(data || []);
+}
+
+/** Claims against items a user reported as found (finder view). */
+export async function fetchClaimsByFinder(finderId) {
+    if (!finderId) return [];
+    const { data, error } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('finder_id', finderId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return attachReportsToClaims(data || []);
+}
+
 export async function updateClaim(id, updates) {
     const { error } = await supabase
         .from('claims')
@@ -116,6 +157,13 @@ export async function submitClaimRpc(reportId, answer1, answer2, answer3) {
         throw new Error('submit_claim returned empty data. Re-run 014 in Supabase and hard-refresh.');
     }
     return result;
+}
+
+/** Finder or admin confirms physical handover (requires 017). Closes the loop. */
+export async function confirmHandoverRpc(claimId) {
+    const { data, error } = await supabase.rpc('confirm_handover', { p_claim_id: claimId });
+    if (error) throw formatRpcError(error, 'confirm_handover', '017_notifications_and_unified_flow.sql');
+    return parseRpcJson(data);
 }
 
 /** Resolve found report after auto-approved claim (requires 012_fix_claims_rls.sql). */

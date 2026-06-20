@@ -1,4 +1,4 @@
-const CACHE = 'lostfinder-v2';
+const CACHE = 'lostfinder-v5';
 const ASSETS = [
     '/',
     '/index.html',
