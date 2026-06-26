@@ -6,7 +6,7 @@
     <title>LostFinder - ICCT Colleges</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%8D</text></svg>">
+    <link rel="icon" href="icon/logo.jpg" type="image/jpeg">
     <link rel="stylesheet" href="main.css">
 </head>
 <body>
@@ -259,29 +259,6 @@
                 </div>
             </section>
 
-            <!-- leaderboard -->
-            <section id="leaderboard" class="hidden">
-                <h2>Leaderboard</h2>
-                <p class="section-subtitle">Top contributors to the Lost & Found community</p>
-                <div class="leaderboard-container">
-                    <table class="leaderboard-table">
-                        <thead>
-                            <tr>
-                                <th>Rank</th>
-                                <th>User</th>
-                                <th>Points</th>
-                                <th>Reports</th>
-                                <th>Badge</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboardTable"></tbody>
-                    </table>
-                </div>
-                <div class="points-info">
-                    <h3>Points System</h3>
-                    <div id="pointsInfoGrid" class="points-grid"></div>
-                </div>
-            </section>
 
             <!-- settings -->
             <section id="settings" class="hidden">
@@ -411,6 +388,13 @@
                 <input type="text" id="claimQ3" placeholder="Your answer..." />
             </div>
 
+            <div class="form-group">
+                <label>Proof Photo (optional)</label>
+                <span class="field-hint">A photo of you with the item, a receipt, or similar evidence helps admins verify your claim faster — especially if your answers don't match exactly.</span>
+                <input type="file" id="claimImage" accept="image/*" onchange="handleClaimImageUpload(event)">
+                <div id="claimImagePreview"></div>
+            </div>
+
             <input type="hidden" id="claimReportId" />
             <button class="btn-primary btn-block" onclick="submitClaim()">Submit Claim</button>
         </div>
@@ -457,7 +441,7 @@
             <div id="sightingResult" class="hidden">
                 <div id="sightingResultBadge" style="margin-bottom:16px;"></div>
                 <p id="sightingResultText" style="color:#2c3e50;line-height:1.6;margin-bottom:16px;"></p>
-                <p style="color:#7f8c8d;font-size:0.9rem;margin-bottom:16px;">The owner can review your tip and confirm if it was helpful or led to recovery. You earn points when verified.</p>
+                <p style="color:#7f8c8d;font-size:0.9rem;margin-bottom:16px;">The owner can review your tip and confirm if it was helpful or led to recovery.</p>
                 <div id="sightingResultActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
                 <button class="btn-secondary btn-block" style="margin-top:12px;" onclick="closeSightingModal()">Close</button>
             </div>
@@ -471,7 +455,7 @@
             <h3>Mark Item Recovered</h3>
             <p id="recoveryItemTitle" style="color:#2c3e50;font-weight:600;margin-bottom:8px;"></p>
             <div class="sighting-notice">
-                ✅ Confirm you got your item back. If someone’s sighting tip helped, credit them — they earn <strong>+25 points</strong>.
+                ✅ Confirm you got your item back. If someone’s sighting tip helped, credit them.
             </div>
             <div class="form-group">
                 <label for="recoveryCredit">Who helped you recover it?</label>

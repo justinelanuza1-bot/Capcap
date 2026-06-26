@@ -13,7 +13,7 @@ import {
     createNotification, createNotificationsForMany, fetchNotifications,
     fetchUnreadCount, markNotificationRead, markAllNotificationsRead, subscribeToNotifications
 } from './js/services/notifications.js';
-import { uploadReportImage, uploadSightingImage } from './js/services/storage.js';
+import { uploadReportImage, uploadSightingImage, uploadClaimImage } from './js/services/storage.js';
 import {
     fetchUserMessages, fetchConversationMessages, sendMessage as sendMessageToDb,
     markMessagesAsRead, subscribeToMessages
@@ -39,6 +39,7 @@ const esc = escapeHtml;
 // ============ CONFIG ============
 let currentUser = null;
 let uploadedImageFile = null;
+let claimImageFile = null;
 let sightingReportId = null;
 let sightingLostReport = null;
 let sightingImageFile = null;
@@ -78,6 +79,44 @@ function timeAgo(dateStr) {
     if (mins > 0) return `${mins}m ago`;
     return 'just now';
 }
+
+// ============ IDLE AUTO-LOGOUT ============
+// Logs the user out automatically after 5 minutes with no interaction.
+// Resets on any mouse, keyboard, scroll, or touch activity.
+
+const IDLE_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+let idleTimer = null;
+
+function startIdleTimer() {
+    clearIdleTimer();
+    idleTimer = setTimeout(handleIdleTimeout, IDLE_LIMIT_MS);
+}
+
+function clearIdleTimer() {
+    if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+    }
+}
+
+async function handleIdleTimeout() {
+    if (!currentUser) return;
+    stopRealtime();
+    stopNotificationsRealtime();
+    _notifications = []; _notifUnread = 0;
+    await signOut();
+    currentUser = null;
+    showLanding();
+}
+
+function resetIdleTimer() {
+    if (!currentUser) return;
+    startIdleTimer();
+}
+
+['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
 
 // ============ TOAST NOTIFICATIONS ============
 // Non-blocking feedback that replaces many alert() calls. Auto-dismisses.
@@ -239,7 +278,7 @@ function isClaimAwaitingHandover(status) {
 function getSightingVerificationBadge(status) {
     switch (status) {
         case 'helpful':
-            return '<span class="sighting-status-badge helpful">✅ Verified helpful (+10 pts)</span>';
+            return '<span class="sighting-status-badge helpful">✅ Verified helpful</span>';
         case 'recovered':
             return '<span class="sighting-status-badge recovered">🎉 Led to recovery</span>';
         case 'dismissed':
@@ -272,8 +311,7 @@ function filterDashboardReviewedTips(sightings) {
 function renderSightingOwnerActions(s, reportPending) {
     const status = s.status || 'pending';
     if (status !== 'pending') {
-        const pts = s.points_awarded ? ` · +${s.points_awarded} pts awarded` : '';
-        return `${getSightingVerificationBadge(status)}${pts ? `<span style="font-size:0.8rem;color:#64748b;margin-left:6px;">${pts}</span>` : ''}`;
+        return getSightingVerificationBadge(status);
     }
     if (!reportPending) {
         return getSightingVerificationBadge('pending');
@@ -397,7 +435,9 @@ function enterApp() {
     updateSidebar();
     startRealtime();
     startNotificationsRealtime();
+    startIdleTimer();
     refreshNotifications();
+    refreshAdminClaimsBadge();
     page('dashboard');
 }
 
@@ -551,7 +591,24 @@ function updateSidebar() {
     const sidebar = document.getElementById('sidebar');
     const initials = getUserInitials(currentUser.name);
     const isAdmin = currentUser.role === 'admin';
-    const dashLabel = isAdmin ? 'Admin' : 'Dashboard';
+
+    const navLinks = isAdmin ? `
+        <a data-page="admin-panel" onclick="page('admin-panel')" class="active"><span class="nav-icon"></span> Dashboard</a>
+        <a data-page="all-items" onclick="page('all-items')"><span class="nav-icon"></span> Items</a>
+        <a data-page="claims-panel" onclick="page('claims-panel')"><span class="nav-icon"></span> Claims<span id="adminClaimsBadge" class="tab-badge hidden" style="margin-left:6px;">0</span></a>
+        <a data-page="admin-users" onclick="page('admin-users')"><span class="nav-icon"></span> Users</a>
+        <a data-page="settings" onclick="page('settings')"><span class="nav-icon"></span> Settings</a>
+        <a onclick="logout()" class="logout-btn"><span class="nav-icon"></span> Logout</a>
+    ` : `
+        <a data-page="dashboard" onclick="page('dashboard')" class="active"><span class="nav-icon"></span> Dashboard</a>
+        <a data-page="lost" onclick="page('lost')"><span class="nav-icon"></span> Lost Items</a>
+        <a data-page="found" onclick="page('found')"><span class="nav-icon"></span> Found Items</a>
+        <a data-page="reports" onclick="page('reports')"><span class="nav-icon"></span> My Reports</a>
+        <a data-page="my-claims" onclick="page('my-claims')"><span class="nav-icon"></span> My Claims</a>
+        <a data-page="messages" onclick="page('messages')"><span class="nav-icon"></span> Messages</a>
+        <a data-page="settings" onclick="page('settings')"><span class="nav-icon"></span> Settings</a>
+        <a onclick="logout()" class="logout-btn"><span class="nav-icon"></span> Logout</a>
+    `;
 
     sidebar.innerHTML = `
         <div class="sidebar-header">
@@ -564,23 +621,31 @@ function updateSidebar() {
         <div class="user-profile">
             <div class="sidebar-avatar-initials">${esc(initials)}</div>
             <div class="user-info">
-                <p class="user-name">${esc(currentUser.name)}${currentUser.role === 'admin' ? ' 👑' : ''}</p>
-                <p class="user-points">⭐ <span id="currentUserPoints">${currentUser.points}</span> pts</p>
+                <p class="user-name">${esc(currentUser.name)}${isAdmin ? ' 👑' : ''}</p>
             </div>
         </div>
         <nav class="sidebar-nav">
-            <a data-page="dashboard" onclick="page('dashboard')" class="active"><span class="nav-icon"></span> ${dashLabel}</a>
-            <a data-page="lost" onclick="page('lost')"><span class="nav-icon"></span> Lost Items</a>
-            <a data-page="found" onclick="page('found')"><span class="nav-icon"></span> Found Items</a>
-            <a data-page="reports" onclick="page('reports')"><span class="nav-icon"></span> My Reports</a>
-            <a data-page="my-claims" onclick="page('my-claims')"><span class="nav-icon"></span> My Claims</a>
-            <a data-page="messages" onclick="page('messages')"><span class="nav-icon"></span> Messages</a>
-            <a data-page="leaderboard" onclick="page('leaderboard')"><span class="nav-icon"></span> Leaderboard</a>
-            <a data-page="settings" onclick="page('settings')"><span class="nav-icon"></span> Settings</a>
-            <a onclick="logout()" class="logout-btn"><span class="nav-icon"></span> Logout</a>
+            ${navLinks}
         </nav>
     `;
     renderNotifBadge();
+}
+async function refreshAdminClaimsBadge() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    try {
+        const claims = await fetchClaims();
+        const pending = claims.filter(c => c.status === 'pending-review').length;
+        const badge = document.getElementById('adminClaimsBadge');
+        if (!badge) return;
+        if (pending > 0) {
+            badge.textContent = pending > 99 ? '99+' : String(pending);
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    } catch (err) {
+        console.error('Could not refresh admin claims badge:', err);
+    }
 }
 
 const ADMIN_PAGES = ['admin-panel', 'all-items', 'claims-panel', 'admin-users'];
@@ -608,12 +673,7 @@ function page(id) {
     const section = document.getElementById(id);
     if (section) section.classList.remove('hidden');
 
-    if (ADMIN_PAGES.includes(id)) {
-        document.querySelector('.sidebar-nav a[data-page="dashboard"]')?.classList.add('active');
-    } else {
-        const navPage = id === 'admin-panel' ? 'dashboard' : id;
-        document.querySelector(`.sidebar-nav a[data-page="${navPage}"]`)?.classList.add('active');
-    }
+    document.querySelector(`.sidebar-nav a[data-page="${id}"]`)?.classList.add('active');
 
     if (id === 'dashboard')    loadDashboard();
     if (id === 'lost')         loadLostItems();
@@ -737,7 +797,7 @@ async function submitReport() {
         updateSidebar();
 
         const remaining = WEEKLY_REPORT_LIMIT - (weeklyCount + 1);
-        alert(`✅ Report submitted!\n\n🎉 +${points} points earned!\n⭐ Total: ${currentUser.points} pts\n\n📊 Weekly reports remaining: ${remaining}/${WEEKLY_REPORT_LIMIT}`);
+        alert(`✅ Report submitted!\n\n📊 Weekly reports remaining: ${remaining}/${WEEKLY_REPORT_LIMIT}`);
         closeReportModal();
 
         if (type === 'lost') {
@@ -830,7 +890,7 @@ async function loadDashboard() {
                 html += `
                     <div class="matches-section" style="border-left-color:#f59e0b;margin-bottom:16px;">
                         <h3>⏳ Tips Awaiting Your Review</h3>
-                        <p style="color:#7f8c8d;margin-bottom:16px;">Confirm if these sightings were helpful or led to recovery — reporters earn points when verified.</p>
+                        <p style="color:#7f8c8d;margin-bottom:16px;">Confirm if these sightings were helpful or led to recovery.</p>
                         ${pendingTips.slice(0, 5).map(s => `
                             <div class="match-card">
                                 <div class="match-info">
@@ -883,7 +943,6 @@ async function loadDashboard() {
                                     <span style="margin-left:8px;color:#7f8c8d;font-size:0.9rem;">owner: ${esc(s.reports?.user_name || 'Unknown')}</span>
                                 </div>
                                 ${getSightingVerificationBadge(s.status || 'pending')}
-                                ${s.points_awarded ? `<span style="font-size:0.85rem;color:#2563eb;font-weight:600;">+${s.points_awarded} pts</span>` : ''}
                                 <p style="margin:4px 0;">${esc(s.description)}</p>
                                 ${s.reports?.user_id ? `
                                     <button onclick="openChat(${s.report_id}, '${s.reports.user_id}', '${escapeQuotes(s.reports.user_name || 'Owner')}', '${escapeQuotes(s.reports.item_name || '')}')" class="btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;">
@@ -1211,6 +1270,8 @@ async function openClaimModal(reportId) {
 
 function closeClaimModal() {
     document.getElementById('claimModal').style.display = 'none';
+    claimImageFile = null;
+    document.getElementById('claimImagePreview').innerHTML = '';
 }
 
 async function openSightingModal(reportId) {
@@ -1278,6 +1339,25 @@ function handleSightingImageUpload(event) {
             `<img src="${e.target.result}" alt="Preview" style="max-width:100%;border-radius:8px;margin-top:8px;">`;
     };
     reader.readAsDataURL(file);
+}
+
+function handleClaimImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+        alert('❌ Image too large (max 5MB)');
+        event.target.value = '';
+        return;
+    }
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file.');
+        event.target.value = '';
+        return;
+    }
+    claimImageFile = file;
+    const previewUrl = URL.createObjectURL(file);
+    document.getElementById('claimImagePreview').innerHTML =
+        `<img src="${previewUrl}" style="max-width:200px;max-height:200px;border-radius:8px;margin-top:10px;">`;
 }
 
 async function submitSighting() {
@@ -1404,14 +1484,13 @@ async function creditSightingRecovery(sightingId, reportId) {
     await addPoints(sighting.reporter_id, recoveryPoints);
     currentUser = await addPoints(currentUser.id, POINTS.resolved);
 
-    alert(`🎉 Item recovered! ${sighting.reporter_name} earned +${recoveryPoints} points. You earned +${POINTS.resolved} points.`);
-    loadMyReports();
+    alert(`🎉 Item recovered! Marked as resolved.`);
     loadDashboard();
     loadLostItems();
 }
 
 async function confirmSightingRecovery(sightingId, reportId) {
-    if (!confirm(`Confirm this person helped you recover your item?\n\nThey earn +${POINTS.sightingRecovered} points and your item will be marked resolved.`)) return;
+    if (!confirm(`Confirm this person helped you recover your item?\n\nYour item will be marked resolved.`)) return;
     try {
         await creditSightingRecovery(sightingId, reportId);
     } catch (err) {
@@ -1526,10 +1605,21 @@ async function submitClaim() {
 
     try {
         const result = await submitClaimRpc(reportId, a1, a2, a3);
+
+        if (claimImageFile && result.claim_id) {
+            try {
+                const imageUrl = await uploadClaimImage(currentUser.id, result.claim_id, claimImageFile);
+                await updateClaim(result.claim_id, { claim_image_url: imageUrl });
+            } catch (imgErr) {
+                console.error('Claim photo upload failed:', imgErr);
+                toast('Claim submitted, but the photo failed to upload.', 'error');
+            }
+        }
+
         closeClaimModal();
+        claimImageFile = null;
 
         if (result.exact_match) {
-            // Unified flow: verified → ready for pickup (NOT auto-resolved).
             alert(
                 `✅ Ownership Verified!\n\n` +
                 `🎟️ Your Retrieval Code: ${result.retrieval_code}\n` +
@@ -1552,6 +1642,7 @@ async function submitClaim() {
         toast('Failed to submit claim: ' + err.message, 'error');
     }
 }
+
 
 // ============ MY CLAIMS (CLAIMANT TRACKER) ============
 const CLAIM_STEPS = ['Submitted', 'Verified', 'Ready for pickup', 'Completed'];
@@ -1652,8 +1743,16 @@ function copyText(text) {
 }
 
 // Finder (or admin) confirms physical handover via the secure RPC.
-async function confirmHandover(claimId, btnLabel = 'Confirm Handover') {
-    if (!confirm('Confirm you have physically handed this item to the claimant?\n\nThis marks the case resolved and awards you points. It cannot be undone.')) return;
+async function confirmHandover(claimId, expectedCode = '', btnLabel = 'Confirm Handover') {
+    const typedCode = prompt(
+        'To confirm handover, ask the claimant for their retrieval code and type it below.\n\n' +
+        'This proves they were physically present to receive the item.'
+    );
+    if (typedCode === null) return; // cancelled
+    if (typedCode.trim().toUpperCase() !== (expectedCode || '').trim().toUpperCase()) {
+        alert('❌ Code does not match. Handover was not confirmed.\n\nMake sure the claimant shows you their exact retrieval code.');
+        return;
+    }
     const btns = document.querySelectorAll(`[data-handover="${claimId}"]`);
     btns.forEach(b => { b.disabled = true; b.textContent = 'Confirming…'; });
     try {
@@ -1745,12 +1844,12 @@ async function renderFinderClaimsBlock() {
                         <strong>${esc(c.item_name)}</strong>
                         <span class="status-badge ${meta.cls}" style="font-size:0.72rem;margin-left:8px;">${meta.label}</span>
                         <div class="finder-claim-sub">Claimed by ${esc(c.claimant_name)} · ${timeAgo(c.created_at)}</div>
-                        ${ready && c.retrieval_code ? `<div class="finder-claim-sub">Ask the claimant for code <code>${esc(c.retrieval_code)}</code> before releasing.</div>` : ''}
+                        ${ready ? `<div class="finder-claim-sub">Ask the claimant for their retrieval code before releasing the item.</div>` : ''}
                         ${c.status === 'pending-review' ? `<div class="finder-claim-sub">Verification was not exact — an admin will review before handover.</div>` : ''}
                     </div>
                     <div class="finder-claim-actions">
                         <button class="btn-secondary" onclick="openChat(${c.report_id},'${c.claimant_id}','${escapeQuotes(c.claimant_name)}','${escapeQuotes(c.item_name)}')">💬 Message</button>
-                        ${ready ? `<button class="btn-primary" data-handover="${c.id}" onclick="confirmHandover(${c.id})">Confirm Handover</button>` : ''}
+                        ${ready ? `<button class="btn-primary" data-handover="${c.id}" onclick="confirmHandover(${c.id}, '${escapeQuotes(c.retrieval_code || '')}')">Confirm Handover</button>` : ''}
                     </div>
                 </div>`;
             }).join('')}
@@ -1965,10 +2064,8 @@ async function loadAdminPanel() {
             : `<div class="admin-inbox-clear">✓ All caught up — no claims waiting for you</div>`;
 
         document.getElementById('admin-panel').innerHTML = `
-            <div class="admin-page">
-            ${adminTabBar('admin-panel', { pendingClaims: stats.pendingClaims, awaitingHandover: stats.awaitingHandover })}
-
-            <header class="admin-page-header">
+    <div class="admin-page">
+    <header class="admin-page-header">
                 <div>
                     <h2>Admin</h2>
                     <p class="section-subtitle">Review claims, manage items, and monitor campus activity</p>
@@ -2015,6 +2112,7 @@ async function loadAdminPanel() {
                     </div>
                 </section>
             </div>
+             ${renderAnalyticsSection(reports)}
             </div>`;
     } catch (err) {
         console.error('Admin panel load failed:', err);
@@ -2060,7 +2158,6 @@ function renderAllItems() {
     const listEl = document.getElementById('adminItemsList');
     if (!listEl) {
         container.innerHTML = `
-            ${adminTabBar('all-items')}
             <h2>All Items</h2>
             <p class="section-subtitle">Manage all reported items in the system</p>
             <div class="admin-filter-bar">
@@ -2137,6 +2234,8 @@ async function loadClaimsPanel(filter) {
     try {
         _adminAllClaims = await fetchClaims();
         renderClaimsPanel();
+        refreshAdminClaimsBadge();
+
     } catch (err) {
         console.error('Load claims panel failed:', err);
         document.getElementById('claims-panel').innerHTML = '<p style="color:red;padding:20px;">Failed to load claims: ' + esc(err.message) + '</p>';
@@ -2193,7 +2292,6 @@ function renderClaimsPanel() {
         </div>`;
 
     container.innerHTML = `
-        ${adminTabBar('claims-panel', { pendingClaims: counts['pending-review'], awaitingHandover: counts.handover })}
         <h2>Claims Review</h2>
         <p class="section-subtitle">Review and manage ownership verification claims</p>
         ${tabsHtml}
@@ -2274,10 +2372,14 @@ function renderClaimCard(c) {
                         ? '<span style="color:#15803d;font-weight:700;">All 3 answers matched</span>'
                         : '<span style="color:#dc2626;font-weight:700;">Answers did not match</span>'}
                 </p>
-                ${c.vague ? '<p style="color:#92400e;font-size:0.82rem;font-weight:600;">Flagged: answers were vague</p>' : ''}
+               ${c.vague ? '<p style="color:#92400e;font-size:0.82rem;font-weight:600;">Flagged: answers were vague</p>' : ''}
                 <p style="font-size:0.76rem;color:#9ca3af;margin-top:6px;">Answer contents hidden (Blind Verification Protocol)</p>
+                <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-top:14px;margin-bottom:6px;">Proof Photo</p>
+                ${c.claim_image_url
+                    ? `<img src="${esc(c.claim_image_url)}" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('${esc(c.claim_image_url)}', '_blank')">`
+                    : '<p style="font-size:0.82rem;color:#dc2626;font-style:italic;">⚠️ No photo provided</p>'}
             </div>
-        </div>` : '';
+        </div>` : ''; 
 
     // ── Finder contact block ────────────────────────────────────────────────
     const finderBlock = r ? `
@@ -2347,7 +2449,7 @@ function renderClaimCard(c) {
     } else if (isClaimAwaitingHandover(c.status)) {
         actionsHtml = `
         <div class="claim-actions-row">
-            <button onclick="adminConfirmHandover(${c.id}, ${c.report_id}, '${c.finder_id}')"
+            <button onclick="adminConfirmHandover(${c.id}, ${c.report_id}, '${c.finder_id}', '${escapeQuotes(c.retrieval_code || '')}')"
                     class="btn-primary" style="flex:2;">Confirm Handover — Mark Success</button>
             <button onclick="openChat(${c.report_id},'${c.claimant_id}','${escapeQuotes(c.claimant_name)}','${escapeQuotes(c.item_name)}')"
                     class="btn-secondary" style="flex:1;">Claimant</button>
@@ -2442,13 +2544,22 @@ async function adminTagMatch(claimId, finderUserId = '', finderName = '') {
 
 // Step 2 of 2: Admin confirms the physical item was handed over.
 // Sets claim → completed, report → resolved, awards points to finder.
-async function adminConfirmHandover(claimId, reportId, finderId) {
+async function adminConfirmHandover(claimId, reportId, finderId, expectedCode = '') {
+    const typedCode = prompt(
+        'Verify the handover before confirming.\n\n' +
+        'Ask the claimant to show their retrieval code and type it here:'
+    );
+    if (typedCode === null) return; // cancelled
+    if (typedCode.trim().toUpperCase() !== (expectedCode || '').trim().toUpperCase()) {
+        alert('❌ Code does not match what was issued to the claimant. Handover was not confirmed.');
+        return;
+    }
     if (!confirm(
-        'Confirm that the physical handover has taken place?\n\n' +
+        'Code verified. Confirm that the physical handover has taken place?\n\n' +
         'This will:\n' +
         '• Mark the claim as Completed\n' +
         '• Mark the report as Resolved\n' +
-        '• Award points to the finder\n\n' +
+        '• Resolve the case\n\n' +
         'This action cannot be undone.'
     )) return;
 
@@ -2504,14 +2615,14 @@ async function adminDenyConfirm(claimId, reportId, claimantId, claimantName) {
 }
 
 async function markResolved(reportId, userId) {
-    if (!confirm('Mark this report as resolved?\n\nThe reporter/finder will receive +20 points. Use this only for cases handled outside the claim flow.')) return;
+    if (!confirm('Mark this report as resolved?\n\nUse this only for cases handled outside the claim flow.')) return;
     try {
         await updateReport(reportId, {
             status: 'resolved',
             resolved_at: new Date().toISOString()
         });
         await addPoints(userId, POINTS.resolved);
-        toast('Report resolved — +20 points awarded.', 'success');
+        toast('Report marked as resolved.', 'success');
         loadAllItems();
     } catch (err) {
         toast('Failed to resolve: ' + err.message, 'error');
@@ -2584,14 +2695,12 @@ function renderAdminUsers() {
             </td>
             <td style="color:#6b7280;font-size:0.85rem;">${esc(u.email || '—')}</td>
             <td><span class="role-badge ${u.role}">${u.role === 'admin' ? '👑 Admin' : u.role_label || 'Student'}</span></td>
-            <td style="font-weight:700;color:#2563eb;">${u.points}</td>
             <td>${u.reportCount}</td>
             <td style="color:#9ca3af;font-size:0.8rem;">${u.contact_number || '—'}</td>
             <td style="color:#9ca3af;font-size:0.8rem;">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
         </tr>`).join('');
 
     container.innerHTML = `
-        ${adminTabBar('admin-users')}
         <h2>Users</h2>
         <p class="section-subtitle">${_adminUsers.length} registered account${_adminUsers.length !== 1 ? 's' : ''} &bull; ${totalAdmins} admin${totalAdmins !== 1 ? 's' : ''}</p>
         <div class="admin-role-chips">
@@ -2612,11 +2721,9 @@ function renderAdminUsers() {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
-                        <th>Points</th>
                         <th>Reports</th>
                         <th>Contact</th>
                         <th>Joined</th>
-                    </tr>
                 </thead>
                 <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:20px;">No users found.</td></tr>'}</tbody>
             </table>
@@ -2645,7 +2752,8 @@ const globalFns = {
     togglePassword, toggleVerificationQuestions, openReportModal, closeReportModal,
     handleImageUpload, submitReport, filterLostItems, filterFoundItems,
     openClaimModal, closeClaimModal, submitClaim, showReportTab,
-    openSightingModal, closeSightingModal, handleSightingImageUpload,
+     openSightingModal, closeSightingModal, handleSightingImageUpload,
+    handleClaimImageUpload,
     updateSightingMatchPreview, submitSighting,
     confirmSightingHelpful, confirmSightingRecovery, dismissSighting,
     openRecoveryModal, closeRecoveryModal, submitLostRecovery,
@@ -2686,3 +2794,109 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     console.log('🚀 LostFinder ready — fully connected to Supabase');
 });
+
+function monthKey(dateStr) {
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key) {
+    const [y, m] = key.split('-');
+    return new Date(y, m - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+}
+
+function computeMonthlyCounts(reports, monthsBack = 6) {
+    const months = {};
+    reports.forEach(r => {
+        const foundKey = monthKey(r.created_at);
+        if (!months[foundKey]) months[foundKey] = { found: 0, returned: 0 };
+        if (r.type === 'found') months[foundKey].found++;
+        if (r.resolved_at) {
+            const resolvedKey = monthKey(r.resolved_at);
+            if (!months[resolvedKey]) months[resolvedKey] = { found: 0, returned: 0 };
+            months[resolvedKey].returned++;
+        }
+    });
+    return Object.entries(months)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-monthsBack)
+        .map(([key, counts]) => ({ label: monthLabel(key), ...counts }));
+}
+
+function computeTopCounts(reports, field, limit = 5) {
+    const counts = {};
+    reports.forEach(r => {
+        const val = (r[field] || 'Uncategorized').trim();
+        if (!val) return;
+        counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([label, count]) => ({ label, count }));
+}
+
+function renderBarChart(data, { maxKey = null, barColor = '#2563eb' } = {}) {
+    if (!data.length) return '<p class="activity-empty">No data yet.</p>';
+    const max = Math.max(...data.map(d => maxKey ? d[maxKey] : d.count), 1);
+    return `
+        <div class="analytics-bars">
+            ${data.map(d => {
+                const value = maxKey ? d[maxKey] : d.count;
+                const pct = Math.round((value / max) * 100);
+                return `
+                    <div class="analytics-bar-row">
+                        <span class="analytics-bar-label">${esc(d.label)}</span>
+                        <div class="analytics-bar-track">
+                            <div class="analytics-bar-fill" style="width:${pct}%;background:${barColor};"></div>
+                        </div>
+                        <span class="analytics-bar-value">${value}</span>
+                    </div>`;
+            }).join('')}
+        </div>`;
+}
+
+function renderMonthlyChart(data) {
+    if (!data.length) return '<p class="activity-empty">No data yet.</p>';
+    const max = Math.max(...data.flatMap(d => [d.found, d.returned]), 1);
+    return `
+        <div class="analytics-monthly">
+            ${data.map(d => `
+                <div class="analytics-month-col">
+                    <div class="analytics-month-bars">
+                        <div class="analytics-month-bar found" style="height:${Math.round((d.found / max) * 100)}%;" title="${d.found} found"></div>
+                        <div class="analytics-month-bar returned" style="height:${Math.round((d.returned / max) * 100)}%;" title="${d.returned} returned"></div>
+                    </div>
+                    <span class="analytics-month-label">${esc(d.label)}</span>
+                </div>`).join('')}
+        </div>
+        <div class="analytics-legend">
+            <span><span class="legend-dot found"></span> Found items reported</span>
+            <span><span class="legend-dot returned"></span> Items returned/resolved</span>
+        </div>`;
+}
+
+function renderAnalyticsSection(reports) {
+    const monthly = computeMonthlyCounts(reports);
+    const topCategories = computeTopCounts(reports, 'category');
+    const topLocations = computeTopCounts(reports, 'location');
+
+    return `
+        <section class="admin-analytics">
+            <h3 style="margin-bottom:16px;">📊 Analytics & Summary</h3>
+            <div class="admin-activity-grid">
+                <div class="admin-activity-panel" style="grid-column:1 / -1;">
+                    <div class="activity-section-header"><h3>Monthly found vs. returned</h3></div>
+                    ${renderMonthlyChart(monthly)}
+                </div>
+                <div class="admin-activity-panel">
+                    <div class="activity-section-header"><h3>Most common categories</h3></div>
+                    ${renderBarChart(topCategories, { barColor: '#7c3aed' })}
+                </div>
+                <div class="admin-activity-panel">
+                    <div class="activity-section-header"><h3>Most frequent locations</h3></div>
+                    ${renderBarChart(topLocations, { barColor: '#059669' })}
+                </div>
+            </div>
+        </section>`;
+}

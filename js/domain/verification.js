@@ -1,6 +1,10 @@
 export function simpleHash(str) {
     if (!str) return '';
-    const normalized = str.toLowerCase().trim().replace(/\s+/g, ' ');
+    const normalized = str
+        .toLowerCase()
+        .trim()
+        .replace(/['".,!?;:()]/g, '')
+        .replace(/\s+/g, ' ');
     let hash = 0;
     for (let i = 0; i < normalized.length; i++) {
         const chr = normalized.charCodeAt(i);

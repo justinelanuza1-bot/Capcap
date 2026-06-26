@@ -154,3 +154,4 @@ export async function findMatches(lostReport, fetchReports) {
         .filter(m => m.score >= 50)
         .sort((a, b) => b.score - a.score);
 }
+

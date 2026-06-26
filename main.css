@@ -18,7 +18,8 @@ body {
 .landing-page {
     position: relative;
     height: 100vh;
-    background: linear-gradient(135deg, #1e508c 0%, #2563eb 50%, #1d4ed8 100%);
+    background: linear-gradient(rgba(30, 80, 140, 0.85), rgba(30, 80, 140, 0.85)),
+                url('icon/icctBckg.jpg') center/cover;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -33,7 +34,7 @@ body {
     left: 40px;
     width: 80px;
     height: 80px;
-    background: white;
+    background: white url('icon/logo.jpg') center/cover;
     border-radius: 50%;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     display: flex;
@@ -43,7 +44,14 @@ body {
 }
 
 .logo::before {
-    content: '🏫';
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-image: url('icon/logo.jpg');
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    display: block;
 }
 
 .search-icon {
@@ -52,7 +60,7 @@ body {
     right: 40px;
     width: 60px;
     height: 60px;
-    background: white;
+    background: white url('icon/search.jpg') center/cover;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -62,9 +70,7 @@ body {
     transition: all 0.3s;
 }
 
-.search-icon::before {
-    content: '🔍';
-}
+
 
 .search-icon:hover {
     background: rgba(0,0,0,0.8);
@@ -119,7 +125,8 @@ h1 {
 /* ============ AUTH FORMS ============ */
 .form-box {
     min-height: 100vh;
-    background: linear-gradient(135deg, #1e508c 0%, #2563eb 50%, #1d4ed8 100%);
+    background: linear-gradient(rgba(30, 80, 140, 0.9), rgba(30, 80, 140, 0.9)),
+                url('https://icct.edu.ph/wp-content/uploads/2019/02/Caintamainhih-01.jpg') center/cover;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -182,7 +189,14 @@ h1 {
 }
 
 .auth-brand .finder-logo::before {
-    content: '🔍';
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-image: url('icon/logo.jpg');
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    display: block;
 }
 
 .finder-logo {
@@ -197,7 +211,14 @@ h1 {
 }
 
 .finder-logo::before {
-    content: '🔍';
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-image: url('icon/logo.jpg');
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    display: block;
 }
 
 .auth-brand-name {
@@ -501,8 +522,16 @@ h1 {
 }
 
 .sidebar-logo::before {
-    content: '🔍';
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-image: url('icon/logo.jpg');
+    background-size: cover;
+    background-position: center;
+    border-radius: 50%;
+    display: block;
 }
+
 
 .sidebar h2 {
     font-size: 1.5rem;
@@ -757,7 +786,8 @@ h1 {
 .card img {
     width: 100%;
     height: 200px;
-    object-fit: cover;
+    object-fit: contain;
+    background: #f3f4f6;
     border-radius: 8px;
     margin-bottom: 16px;
 }
@@ -778,7 +808,8 @@ h1 {
 .item-image {
     width: 100%;
     height: 200px;
-    object-fit: cover;
+    object-fit: contain;
+    background: #f3f4f6;
     border-radius: 8px;
     margin-bottom: 16px;
 }
